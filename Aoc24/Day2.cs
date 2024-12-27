@@ -7,7 +7,11 @@
   }
 
   [TestMethod]public void Puzzle() {
-    SafeRpt(inp);
+    SafeRpt(inp); // 324
+  }
+
+  [TestMethod]public void MyTests() {
+    SafeRpt(test);
   }
 
   void SafeRpt(string inp) {
@@ -16,48 +20,85 @@
     for (int l=0; l<lines.Length; l++) {
       string line = lines[l];
       var rpt = line.Split(" ").Select(x => int.Parse(x)).ToArray();
-      bool? inc = null;
-      bool safe = true;
-      for (int i=0; i<rpt.Count(); i++) {
-        if (i == 0)
-          continue;
-        int lvl = rpt[i];
-        int prvLvl = rpt[i-1];
-        if (inc == null)
-          inc = lvl > prvLvl;
-        
-        bool tmpInc = lvl > prvLvl;
-        if (inc != tmpInc) {
-          (string dir, string rev) = inc.Value ? ("inc", "dec") : ("dec", "inc");
-          Log($"Report {l+1} changed direction from {dir} to {rev}");
-          safe = false;
-          break;
-        }
-
-        int diff = lvl - prvLvl;
-        if (diff == 0) {
-          Log($"Report {l+1} not changing.");
-          safe = false;
-          break;
-        }
-        else if (diff > 3) {
-          Log($"Report {l+1} increased by more than 3.");
-          safe = false;
-          break;
-        }
-        else if (diff < -3) {
-          Log($"Report {l+1} decreased by more than 3.");
-          safe = false;
-          break;
-        }
-      }
-      if (safe) {
-        Log($"Report {l+1} safe {(inc.Value ? "inc" : "dec")}.");
+      (bool isSafe, string? msg) = checkRptSafety(rpt, l);
+      if (isSafe) {
+        Log($"Report {l+1} safe.");
         safeCt++;
       }
     }
     Log($"Safe reports: {safeCt}");
   }
+
+  (bool isSafe, string? msg) checkRptSafety(int[] rpt, int l, int errCt = 0) {
+    int max_err = 1;
+    bool? inc = null;
+    bool safe = true;
+    for (int i=0; i<rpt.Count(); i++) {
+      (safe, string? msg, inc) = checkLvlSafety(l, rpt, i, inc, errCt, max_err);
+      if (!safe) {
+        rpt.ToList().ForEach(num => System.Diagnostics.Debug.Write($"{num},"));
+        Log(msg);
+        if (errCt >= max_err) {
+          return (safe, msg);
+        }
+        var ls = rpt.ToList(); ls.RemoveAt(i); var arr = ls.ToArray();
+        errCt += 1;
+        (safe, msg) = checkRptSafety(arr, l, errCt);
+        // try to remove previous
+        if (!safe && i >= 1) {
+          ls = rpt.ToList(); ls.RemoveAt(i-1); var arr2 = ls.ToArray();
+          (safe, msg) = checkRptSafety(arr2, l, errCt);
+        }
+        if (!safe && i >= 2) {
+          ls = rpt.ToList(); ls.RemoveAt(i-2); var arr3 = ls.ToArray();
+          (safe, msg) = checkRptSafety(arr3, l, errCt);
+        }
+        return (safe, msg);
+      }
+    }
+    return (safe, null);
+  }
+
+  (bool isSafe, string? msg, bool? inc) checkLvlSafety(int l, int[] rpt, int i, bool? inc, int errCt, int max_err) {
+    if (i == 0)
+      return (true, null, inc);
+
+    int lvl = rpt[i];
+    int prvLvl = rpt[i-1];
+    if (inc == null)
+      inc = lvl > prvLvl;
+        
+    bool tmpInc = lvl > prvLvl;
+    if (inc != tmpInc) {
+      (string dir, string rev) = inc.Value ? ("inc", "dec") : ("dec", "inc");
+      return (false, $"Report {l+1} changed direction from {dir} to {rev}", inc);
+    }
+
+    int diff = lvl - prvLvl;
+    if (diff == 0)
+      return (false, $"Report {l+1} not changing.", inc);
+    else if (diff > 3)
+      return (false, $"Report {l+1} increased by more than 3.", inc);
+    else if (diff < -3)
+      return (false, $"Report {l+1} decreased by more than 3.", inc);
+    else
+      return (true, null, inc);
+  }
+
+  string test =
+        "5 6 7 8 9"  // safe inc
+    .nl("5 4 3 2 1") // safe dec
+
+    .nl("5 4 5 6 7") // safe inc (rmv i0 5 = 4 5 6 7)
+    .nl("5 8 4 3 2") // safe dec (rmv i1 8 = 5 4 3 2)
+    .nl("5 4 5 3 2") // safe dec (rmv i2 5 = 5 4 3 2)
+    .nl("5 7 4 3 2") // safe dec (rmv i0 or i1)
+
+    .nl("5 6 7 6 8") // safe inc (rmv i4) after 3 in row don't need to retry previous
+
+    .nl("8 7 9 2 1") // unsafe (2 and 1 dec more than 3)
+    .nl("1 2 3 4 1");// safe inc (rmv last 1 = 1 2 3 4)
+
   string ans = """
     7 6 4 2 1
     1 2 7 8 9
@@ -1069,10 +1110,4 @@
     54 56 57 60 62 64 65
     62 63 66 68 70 73
     """;
-}
-
-public class Script {
-  public void Log(string msg) {
-    System.Diagnostics.Debug.WriteLine(msg);
-  }
 }
